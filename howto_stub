@@ -1,0 +1,20 @@
+#! /bin/bash
+
+PROGNAME="$(basename "$0")"
+
+if [ "$PROGNAME" = "howto_stub" ] ; then
+    if [ -z "$1" ] ; then
+	echo 1>&2 "Usage: howto_sub progname"
+	exit 1
+    fi
+    TARGETDIR="$(dirname "$0")"
+    if [ -e "$TARGETDIR/$1" ] ; then
+	echo 1>&2 "$TARGETDIR/$1 already exists"
+	exit 1
+    fi
+    set -x
+    cp --archive "$0" "$TARGETDIR/$1"
+else
+    exec howto -q $PROGNAME "$@"
+fi
+
