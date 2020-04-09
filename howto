@@ -335,7 +335,7 @@ sub _singularity_do_pull {
 sub _singularity_do_exec {
   my ($image_version,$alt_cmd,@exec_args) = @_;
 
-    my @singularity_args;
+  my @singularity_args;
 
   if ( $is_pvs{$alt_cmd} || $image_version =~ /^pvstodghill\// ) {
     push @singularity_args, "-e"; # clean environment
@@ -345,6 +345,14 @@ sub _singularity_do_exec {
     push @singularity_args, "-H", $mount_path.":/mnt";
     push @singularity_args, "--pwd", "/mnt".$cwd_suffix;
   }
+
+  if ( $is_gui{$alt_cmd} ) {
+    my $DISPLAY = $ENV{DISPLAY};
+    ( defined($DISPLAY) ) || die "GUI command, but \$DISPLAY is not set,";
+    push @singularity_args, "-B", "/tmp/.X11-unix:/tmp/.X11-unix";
+    @exec_args = ( "env", "DISPLAY=$DISPLAY", @exec_args );
+  }
+
 
   $ENV{LC_ALL} = 'C';
   $image_version = "docker://".$image_version;
