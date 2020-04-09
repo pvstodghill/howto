@@ -7,7 +7,7 @@ First install Docker and/or Singularity. The `howto` script used
 Singularity by default, but this can be override by setting the
 following environment variable,
 
-    export HOWTO_BACKEND=dockerw
+    export HOWTO_BACKEND=docker
 
 The `howto` script is written in Perl and relies on a handful of
 external libraries that should be part of the Perl core.
