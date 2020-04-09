@@ -258,7 +258,7 @@ sub _docker_do_pull {
 }
 
 sub _docker_do_exec {
-  my ($image_version,$alt_cmd,$exec_cmd,@exec_args) = @_;
+  my ($image_version,$alt_cmd,@exec_args) = @_;
 
   my @docker_args;
 
@@ -333,7 +333,7 @@ sub _singularity_do_pull {
 }
 
 sub _singularity_do_exec {
-  my ($image_version,$alt_cmd,$exec_cmd,@exec_args) = @_;
+  my ($image_version,$alt_cmd,@exec_args) = @_;
 
     my @singularity_args;
 
@@ -448,7 +448,7 @@ sub do_exec {
     print STDERR "### $image_version\n";
   }
 
-  my $error = $_exec->($image_version,$alt_cmd,$exec_cmd,@exec_args);
+  my $error = $_exec->($image_version,$alt_cmd,@exec_args);
 
   return $error;
 }
