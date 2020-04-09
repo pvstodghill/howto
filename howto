@@ -21,15 +21,16 @@ use Getopt::Std;
 
 our $opt_b = $ENV{HOWTO_BACKEND} || "singularity";
 our $opt_c;
-our $opt_m = $ENV{HOWTO_MOUNT_DIR} || ".";
 our $opt_e = "";
 our $opt_f;
 our $opt_h;
 our $opt_l;
+our $opt_m = $ENV{HOWTO_MOUNT_DIR} || ".";
+our $opt_n;
 our $opt_p;
 our $opt_q;
-our $opt_t;
 our $opt_s;
+our $opt_t;
 our $opt_v;
 
 sub usage {
@@ -46,6 +47,7 @@ sub usage {
   print STDERR "-h - print help\n";
   print STDERR "-l - list known commands and images\n";
   print STDERR "-m DIR - mount directory tree DIR [\$HOWTO_MOUNT_DIR or \".\"]\n";
+  print STDERR "-n - dryrun. print but do not execute commands. implies -v\n";
   print STDERR "-p - pull packages\n";
   print STDERR "-q - quiet, suppress all output\n";
   print STDERR "-s - open a shell instead of running the command\n";
@@ -55,12 +57,16 @@ sub usage {
   exit(@_);
 }
 
-my $stat = getopts('b:c:e:f:hlm:pqstv');
+my $stat = getopts('b:c:e:f:hlm:npqstv');
 if (!$stat) {
   usage(1);
 }
 if ($opt_h) {
   usage();
+}
+
+if ( $opt_n ) {
+  $opt_v = TRUE;
 }
 
 $opt_b = lc($opt_b);
@@ -119,14 +125,15 @@ my @config_elements = YAML::LoadFile($config_file);
 # Parse the config elements
 # ------------------------------------------------------------------------
 
-my %is_command;
 my %image_of;
-my %version_of;
-my %user_of;
+my %is_command;
 my %is_gui;
-my %is_tty;
-my %is_java;
 my %is_implicit;
+my %is_java;
+my %is_pvs;
+my %is_tty;
+my %user_of;
+my %version_of;
 
 foreach my $x ( @config_elements ) {
   my $ref_type = ref $x;
@@ -147,6 +154,7 @@ foreach my $x ( @config_elements ) {
     next if ($key eq "image");
     next if ($key eq "implicit");
     next if ($key eq "java");
+    next if ($key eq "pvs");
     next if ($key eq "tty");
     next if ($key eq "user");
     next if ($key eq "version");
@@ -167,6 +175,7 @@ foreach my $x ( @config_elements ) {
   my $chunk_gui =  $x->{gui} || "false";
   my $chunk_implicit =  $x->{implicit} || "false";
   my $chunk_java =  $x->{java} || "false";
+  my $chunk_pvs =  $x->{pvs} || "false";
   my $chunk_tty =  $x->{tty} || "false";
   my $chunk_user =  $x->{user} || join(":",$_uid,$_gid);
   my $chunk_version = $x->{version} || "latest";
@@ -220,6 +229,7 @@ foreach my $x ( @config_elements ) {
     $image_of{$command_name} = $chunk_image;
     $version_of{$command_name} = $chunk_version;
     $is_implicit{$command_name} = bool($chunk_implicit);
+    $is_pvs{$command_name} = bool($chunk_pvs);
 
     $is_gui{$command_name} = bool($command_gui);
     $is_tty{$command_name} = bool($command_tty);
@@ -252,7 +262,7 @@ sub _docker_do_exec {
 
   my @docker_args;
 
-  if ( $image_version =~ /^pvstodghill\// ) {
+  if ( $is_pvs{$alt_cmd} || $image_version =~ /^pvstodghill\// ) {
     # Mount the current directory as container:/mnt
     push @docker_args, "-v", $mount_path.":/mnt";
     push @docker_args, "-w", "/mnt".$cwd_suffix;
@@ -327,7 +337,7 @@ sub _singularity_do_exec {
 
     my @singularity_args;
 
-  if ( $image_version =~ /^pvstodghill\// ) {
+  if ( $is_pvs{$alt_cmd} || $image_version =~ /^pvstodghill\// ) {
     push @singularity_args, "-e"; # clean environment
     # Mount the current directory as container:/mnt
     push @singularity_args, "-c"; # use minimal /dev
@@ -461,7 +471,12 @@ exit($exit_stat);
 
 sub run {
   diag(join(" ","++",@_));
-  my $stat = system(@_);
+  my $stat;
+  if ( $opt_n ) {
+    $stat = 0;
+  } else {
+    $stat = system(@_);
+  }
   # copied from perlfunc(1)
   if ($? == -1) {
     print STDERR "### failed to execute: $!\n";
