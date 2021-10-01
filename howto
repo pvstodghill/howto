@@ -191,6 +191,8 @@ foreach my $x ( @config_elements ) {
     push @chunk_commands, @{$x->{commands}}
   }
 
+  my $found_dups = FALSE;
+
   foreach my $y ( @chunk_commands ) {
     my $command_name;
     my $z;
@@ -225,7 +227,11 @@ foreach my $x ( @config_elements ) {
     my $command_user =  $z->{user} || $chunk_user;
 
     if ( defined($is_command{$command_name}) ) {
-      die "Duplicate command: $command_name,";
+      if (!$found_dups) {
+	print STDERR "Duplicate command(s):\n";
+	$found_dups = TRUE;
+      }
+      print " - $command_name\n";
     }
 
     $is_command{$command_name} = TRUE;
@@ -238,6 +244,10 @@ foreach my $x ( @config_elements ) {
     $is_tty{$command_name} = bool($command_tty);
     $is_java{$command_name} = bool($command_java);
     $user_of{$command_name} = $command_user;
+  }
+
+  if ($found_dups) {
+    exit(1);
   }
 }
 
