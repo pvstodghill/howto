@@ -34,6 +34,9 @@ our $opt_s;
 our $opt_t;
 our $opt_v;
 
+my $docker_cmd = $ENV{HOWTO_DOCKER_CMD} || "docker";
+my $singularity_cmd = $ENV{HOWTO_SINGULARITY_CMD} || "singularity";
+
 sub usage {
   my $progname = basename($0);
   print STDERR "Usage: $progname [options] cmd args ...\n";
@@ -42,7 +45,7 @@ sub usage {
   print STDERR "Usage: $progname [options] -p '*'\n";
 
   print STDERR "-T TMPDIR - mount TMDIR as /tmp [$opt_T]\n";
-  print STDERR "-b BACKEND - \"docker", \"singularity\" [$opt_b]\n";
+  print STDERR "-b BACKEND - \"docker\", \"singularity\" [$opt_b]\n";
   print STDERR "-c alt_cmd - use image for alt_cmd to run cmd\n";
   print STDERR "-e VAR1,VAR2,... - export values of environment variables VAR1,VAR2,... to docker\n";
   print STDERR "-f FILENAME - config file [./.howto.yaml or ~/.howto.yaml]\n";
@@ -264,7 +267,7 @@ sub bool {
 
 sub _docker_do_pull {
   my ($image) = @_;
-  my $stat = run("docker","pull",$image);
+  my $stat = run($docker_cmd,"pull",$image);
   if ( $stat != 0 ) {
     return $stat;
   }
@@ -323,7 +326,7 @@ sub _docker_do_exec {
     push @docker_args, "-e", ($var."=".$ENV{$var});
   }
 
-  my $error = run("docker", "run", @docker_args, $image_version, @exec_args);
+  my $error = run($docker_cmd, "run", @docker_args, $image_version, @exec_args);
 
   return $error;
 }
@@ -339,7 +342,7 @@ sub _singularity_do_pull {
   # this is not ideal...
   my $temp_sif = mktemp( "/tmp/howtoXXXXX" );
 
-  my $stat = run("singularity","pull",$temp_sif, $image);
+  my $stat = run($singularity_cmd,"pull",$temp_sif, $image);
 
   unlink($temp_sif);
 
@@ -375,7 +378,7 @@ sub _singularity_do_exec {
 
   $ENV{LC_ALL} = 'C';
   $image_version = "docker://".$image_version;
-  my $error = run("singularity", "run", @singularity_args, $image_version, @exec_args);
+  my $error = run($singularity_cmd, "run", @singularity_args, $image_version, @exec_args);
 
   return $error;
 }
