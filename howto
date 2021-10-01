@@ -459,7 +459,8 @@ sub do_exec {
   
   my $image = $image_of{$alt_cmd};
   if ( !defined($image) ) {
-    return run($exec_cmd,@cmd_args);
+    die "Cannot find image for command: $alt_cmd,";
+    #return run($exec_cmd,@cmd_args);
   }
   my $version = $version_of{$alt_cmd};
   my $image_version = $image.":".$version;
