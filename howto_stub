@@ -15,6 +15,13 @@ if [ "$PROGNAME" = "howto_stub" ] ; then
     set -x
     cp --archive "$0" "$TARGETDIR/$1"
 else
-    exec howto -q $PROGNAME "$@"
+    if [ -s "$HOWTO_TMP" ] ; then
+	: nothing
+    elif [ -e ~/tmp ] ; then
+	HOWTO_TMP=$HOME/tmp
+    else
+	HOWTO_TMP=/tmp
+    fi
+    exec howto -T ${HOWTO_TMP} -q $PROGNAME "$@"
 fi
 
