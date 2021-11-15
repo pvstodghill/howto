@@ -141,6 +141,17 @@ my %is_tty;
 my %user_of;
 my %version_of;
 
+sub cleanup {
+  my ($s) = @_;
+  $s =~ s/#.*//;
+  $s =~ s/^[ \t]+//;
+  $s =~ s/[ \t]+$//;
+  if ($s =~ /[ \t]+/) {
+    print STDERR "WARNING: white space in keyword <<$s>>\n";
+  }
+  return $s;
+}
+
 foreach my $x ( @config_elements ) {
   my $ref_type = ref $x;
   if ( !$ref_type ) {
@@ -194,6 +205,8 @@ foreach my $x ( @config_elements ) {
     push @chunk_commands, @{$x->{commands}}
   }
 
+  $chunk_version = cleanup($chunk_version);
+
   my $found_dups = FALSE;
 
   foreach my $y ( @chunk_commands ) {
@@ -228,6 +241,8 @@ foreach my $x ( @config_elements ) {
     my $command_tty =  $z->{tty} || $chunk_tty;
     my $command_java =  $z->{java} || $chunk_java;
     my $command_user =  $z->{user} || $chunk_user;
+
+    $command_name = cleanup($command_name);
 
     if ( defined($is_command{$command_name}) ) {
       if (!$found_dups) {
