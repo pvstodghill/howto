@@ -1,19 +1,29 @@
 #! /usr/bin/env perl
 
 use strict;
-use warnings;
-#use Carp::Always;
+use feature 'postderef';
+no warnings "experimental::postderef";
+use warnings FATAL => 'all';
+use Carp::Always;
+
 use English;
 use Cwd 'abs_path';
 
-
-
-use File::Temp qw{:mktemp};
-
 use constant { TRUE => 1, FALSE => 0 };
+
+# ------------------------------------------------------------------------
 
 my ($_gid) = split(/ /,$GID);
 my $_uid = $UID;
+
+our $default_attibutes = {
+			gui => "false",
+			implicit => "false",
+			java => "false",
+			pvs => "false",
+			tty => "false",
+			user => join(":",$_uid,$_gid),
+		       };
 
 # ------------------------------------------------------------------------
 # Read command line
@@ -37,8 +47,8 @@ our $opt_s;
 our $opt_t;
 our $opt_v;
 
-my $docker_cmd = $ENV{HOWTO_DOCKER_CMD} || "docker";
-my $singularity_cmd = $ENV{HOWTO_SINGULARITY_CMD} || "singularity";
+our $docker_cmd = $ENV{HOWTO_DOCKER_CMD} || "docker";
+our $singularity_cmd = $ENV{HOWTO_SINGULARITY_CMD} || "singularity";
 
 sub usage {
   my $progname = basename($0);
@@ -81,7 +91,6 @@ sub normalize_backend {
   my ($raw) = @_;
   my $s = lc($raw);
   return $s if ($s eq "docker");
-  return $s if ($s eq "native");
   return $s if ($s eq "singularity");
   die;
   print STDERR "Invalid backend: <<$raw>>\n";
@@ -96,9 +105,9 @@ if ($opt_b) {
 # Figure out mount and working directories
 # ------------------------------------------------------------------------
 
-my $tmp_path = abs_path($opt_T) if (defined($opt_T));
-my $mount_path = abs_path($opt_m);
-my $cwd_path = abs_path($ENV{PWD});
+our $tmp_path = abs_path($opt_T) if (defined($opt_T));
+our $mount_path = abs_path($opt_m);
+our $cwd_path = abs_path($ENV{PWD});
 
 if ( 0 != index($cwd_path,$mount_path) ) {
   print STDERR "Mount dir must be a parent of the pwd.\n";
@@ -113,10 +122,347 @@ if ( $mount_uid != $UID ) {
   exit 1;
 }
 
-my $cwd_suffix = substr($cwd_path,length($mount_path));
+our $cwd_suffix = substr($cwd_path,length($mount_path));
 
 # ------------------------------------------------------------------------
-# Read config file
+# Creating and registering commands
+# ------------------------------------------------------------------------
+
+my $commands = {};
+
+sub bool {
+  my ($s) = @_;
+  return TRUE if (lc($s) eq "true");
+  return FALSE if (lc($s) eq "false");
+  die "Unexpected boolean: <<$s>>,";
+}
+
+sub create_command {
+  my ($collection,$collection_element,$command_element) = @_;
+
+  my $command_name;
+  my $z;
+  my $ref_type = ref $command_element;
+  if ( !$ref_type ) {
+    $command_name = $command_element;
+    $z = {};
+  } elsif ( $ref_type eq "HASH" ) {
+    my ($name,$null) = keys %$command_element;
+    if (!defined($name) || defined($null)) {
+      die "Ill-formed command element,";
+    }
+    $command_name = $name;
+    $z = $command_element->{$name};
+  } else {
+    die "Unexpected $ref_type element,"
+  }
+
+  if (defined($commands->{$command_name})) {
+    die "Duplicate command: <<$command_name>>,";
+  }
+
+  my $attrs = {
+	       name => $command_name,
+	       collection => $collection,
+	      };
+
+  foreach my $attr ("gui", "implicit", "java", "tty") {
+    if ($z->{$attr}) {
+      $attrs->{$attr} = bool($z->{$attr});
+    } elsif ($collection_element->{$attr}) {
+      $attrs->{$attr} = bool($collection_element->{$attr});
+    } elsif ($::default_attibutes->{$attr}) {
+      $attrs->{$attr} = bool($::default_attibutes->{$attr});
+    }
+  }
+
+  foreach my $attr ("user") {
+    if ($z->{$attr}) {
+      $attrs->{$attr} = $z->{$attr};
+    } elsif ($collection_element->{$attr}) {
+      $attrs->{$attr} = $collection_element->{$attr};
+    } elsif ($::default_attibutes->{$attr}) {
+      $attrs->{$attr} = $::default_attibutes->{$attr};
+    }
+  }
+
+  $commands->{$command_name} = $attrs;
+}
+
+
+
+
+# ------------------------------------------------------------------------
+# "Base" collection of commands
+# ------------------------------------------------------------------------
+
+sub cleanup {
+  my ($s) = @_;
+  $s =~ s/#.*//;
+  $s =~ s/^[ \t]+//;
+  $s =~ s/[ \t]+$//;
+  if ($s =~ /[ \t]+/) {
+    print STDERR "WARNING: white space in keyword <<$s>>\n";
+  }
+  return $s;
+}
+
+package Collection {
+
+  use strict;
+
+  sub new {
+    my $class = shift;
+    my $self = {};
+    bless $self, $class;
+    $self->_initialize(@_);
+    return $self;
+  }
+
+  sub _initialize {
+    my ($self,$element) = @_;
+
+    my @raw_commands = ();
+
+    if ( $element->{command} ) {
+      @raw_commands = ($element->{command});
+    } elsif ( $element->{commands} ) {
+      @raw_commands = @{$element->{commands}}
+    }
+
+    foreach my $raw_command ( @raw_commands ) {
+      ::create_command($self,$element,$raw_command);
+    }
+  }
+
+  sub name {
+    my ($self) = @_;
+    return $self->{name};
+  }
+
+  1;
+};
+
+# ------------------------------------------------------------------------
+# Collection of native commands
+# ------------------------------------------------------------------------
+
+package NativeCollection {
+
+  use strict;
+
+  our @ISA = qw(Collection);
+
+  sub _initialize {
+    my ($self,$element) = @_;
+    $self->SUPER::_initialize($element);
+
+    $self->{backend} = "native";
+    
+    ($element->{native}) || die;
+    $self->{name} = ::cleanup($element->{native});
+  }
+
+  sub do_pull {
+    my ($self) = @_;
+    # noop;
+    1;
+  }
+
+  sub do_exec {
+    my ($self,$command,@exec_command_line) = @_;
+    return ::run(@exec_command_line);
+  }
+
+  1;
+};
+
+# ------------------------------------------------------------------------
+# Collection of Docker commands
+# ------------------------------------------------------------------------
+
+package DockerCollection {
+
+  use strict;
+
+  our @ISA = qw(Collection);
+
+  sub _initialize {
+    my ($self,$element) = @_;
+    $self->SUPER::_initialize($element);
+    $self->{backend} = "docker";
+        ($element->{image}) || die;
+    $self->{image} = ::cleanup($element->{image});
+    $self->{version} = ::cleanup($element->{version} || "latest");
+    $self->{name} = $self->{image}.":".$self->{version};
+  }
+
+  sub do_pull {
+    my ($self) = @_;
+    if ($self->{pulled}) {
+      return;
+    }
+    $self->{pulled} = ::TRUE;
+
+    my $image = $self->{name};
+    my $stat = ::run($docker_cmd,"pull",$image);
+    if ( $stat != 0 ) {
+      return $stat;
+    }
+  }
+
+  sub do_exec {
+    my ($self,$command,@exec_command_line) = @_;
+
+    my @docker_args;
+
+    if ( $command->{pvs} || $self->{image} =~ /^pvstodghill\// ) {
+      # Mount the current directory as container:/mnt
+      push @docker_args, "-v", $mount_path.":/mnt";
+      if ( $::tmp_path ) {
+	push @docker_args, "-v", $tmp_path.":/tmp";
+      }
+      push @docker_args, "-w", "/mnt".$::cwd_suffix;
+    }
+    push @docker_args, "--user", $command->{user};
+
+    # set TERM
+    push @docker_args, "-e", "TERM=".$ENV{TERM};
+    # Don't log. It fills the disk.
+    push @docker_args, "--log-driver=none";
+    # Delete the container when finished.
+    push @docker_args, "--rm";
+    # so piping commands work
+    push @docker_args, "-i";
+    # run interactively
+    if ( $::opt_s || $::opt_t || $command->{tty} ) {
+      push @docker_args, "-t";
+    }
+    # For Java commands, pass Java flags
+    if ( $command->{java} ) {
+      my $JVM_FLAGS=$ENV{JVM_FLAGS};
+      if ( defined($JVM_FLAGS) ) {
+	push @docker_args, "-e", "\"JVM_FLAGS=$JVM_FLAGS\""
+      }
+    }
+    # For GUI commands, pass X11 flags
+    if ( $command->{gui} ) {
+      my $DISPLAY = $ENV{DISPLAY};
+      ( defined($DISPLAY) ) || die "GUI command, but \$DISPLAY is not set,";
+      if ( $::OSNAME eq "linux" ) {
+	push @docker_args, "-e", "DISPLAY=$DISPLAY";
+	push @docker_args, "-v", "/tmp/.X11-unix:/tmp/.X11-unix";
+      } elsif ( $::OSNAME eq "darwin" ) {
+	push @docker_args, darwin_x11_args();
+      } else {
+	die "Cannot start GUI commands on <<$::OSNAME>>,";
+      }
+    }
+    # export the variables
+    foreach my $var ( split(/,/, $::opt_e) ) {
+      # fixme: should value better quoted?
+      push @docker_args, "-e", ($var."=".$ENV{$var});
+    }
+
+    my $image_version = $self->{name};
+
+    if ($command->{implicit}) {
+      shift @exec_command_line;
+    }
+
+    my $error = ::run($::docker_cmd, "run", @docker_args, $image_version, @exec_command_line);
+
+    return $error;
+  }
+
+  1;
+};
+
+# ------------------------------------------------------------------------
+# Collection of Singularity commands
+# ------------------------------------------------------------------------
+
+package SingularityCollection {
+
+  use strict;
+
+  our @ISA = qw(DockerCollection);
+
+  use File::Temp qw{:mktemp};
+
+  sub _initialize {
+    my ($self,$element) = @_;
+    $self->SUPER::_initialize($element);
+    $self->{backend} = "singularity";
+  }
+
+  sub do_pull {
+    my ($self) = @_;
+    if ($self->{pulled}) {
+      return;
+    }
+    $self->{pulled} = ::TRUE;
+
+    my $image = "docker://".$self->{name};
+
+    # this is not ideal...
+    my $temp_sif = mktemp( "/tmp/howtoXXXXX" );
+
+    my @silent_arg = $::opt_q ? ("-s") : ();
+    my $stat = ::run($::singularity_cmd,@silent_arg,"pull",$temp_sif, $image);
+
+    unlink($temp_sif);
+
+    if ( $stat != 0 ) {
+      return $stat;
+    }
+
+  }
+
+  sub do_exec {
+    my ($self,$command,@exec_command_line) = @_;
+
+    my @singularity_args;
+
+    if ( $command->{pvs} || $self->{image} =~ /^pvstodghill\// ) {
+      push @singularity_args, "-e"; # clean environment
+      # Mount the current directory as container:/mnt
+      push @singularity_args, "-c"; # use minimal /dev
+      push @singularity_args, "-B", $mount_path.":/mnt";
+      if ( $::tmp_path ) {
+	push @singularity_args, "-B", $::tmp_path.":/tmp";
+      }
+      push @singularity_args, "-H", $mount_path.":/mnt";
+      push @singularity_args, "--pwd", "/mnt".$cwd_suffix;
+    }
+
+    # not needed?
+    # if ( $command->{gui} ) {
+    #   my $DISPLAY = $ENV{DISPLAY};
+    #   ( defined($DISPLAY) ) || die "GUI command, but \$DISPLAY is not set,";
+    #   push @singularity_args, "-B", "/tmp/.X11-unix:/tmp/.X11-unix";
+    #   @exec_command_line = ( "env", "DISPLAY=$DISPLAY", @exec_command_line );
+    # }
+
+    if ($command->{implicit}) {
+      shift @exec_command_line;
+    }
+
+    $ENV{LC_ALL} = 'C';
+    my $image_version = "docker://".$self->{name};
+
+    my @silent_arg = $::opt_q ? ("-s") : ("-q");
+    my $error = ::run($singularity_cmd, @silent_arg, "run", @singularity_args, $image_version,
+		      @exec_command_line);
+
+    return $error;
+  }
+
+  1;
+};
+
+# ------------------------------------------------------------------------
+# Read and parse config file
 # ------------------------------------------------------------------------
 
 my $config_file;
@@ -139,31 +485,7 @@ use YAML;
 
 my @config_elements = YAML::LoadFile($config_file);
 
-# ------------------------------------------------------------------------
-# Parse the config elements
-# ------------------------------------------------------------------------
-
-my %backend_of;
-my %image_of;
-my %is_command;
-my %is_gui;
-my %is_implicit;
-my %is_java;
-my %is_pvs;
-my %is_tty;
-my %user_of;
-my %version_of;
-
-sub cleanup {
-  my ($s) = @_;
-  $s =~ s/#.*//;
-  $s =~ s/^[ \t]+//;
-  $s =~ s/[ \t]+$//;
-  if ($s =~ /[ \t]+/) {
-    print STDERR "WARNING: white space in keyword <<$s>>\n";
-  }
-  return $s;
-}
+my @all_collections;
 
 foreach my $x ( @config_elements ) {
   my $ref_type = ref $x;
@@ -175,299 +497,30 @@ foreach my $x ( @config_elements ) {
     die "Unexpected $ref_type element,"
   }
 
-  foreach my $key ( keys %$x) {
-
-    next if ($key eq "backend");
-    next if ($key eq "command");
-    next if ($key eq "commands");
-    next if ($key eq "gui");
-    next if ($key eq "image");
-    # "implicit": Docker image runs command without explicit
-    # invokation. E.g., "docker run bowtie2 args ..."
-    next if ($key eq "implicit");
-    next if ($key eq "java");
-    next if ($key eq "pvs");
-    next if ($key eq "tty");
-    next if ($key eq "user");
-    next if ($key eq "version");
-
-    print STDERR "# ignoring unexpected key: <<$key>>\n";
-  }
-
-  my $chunk_image = $x->{image};
-  if ( !defined($chunk_image) ) {
-    die "'image' was not specified,";
-  }
-
-  my $chunk_backend;
-  if ($x->{backend}) {
-    $chunk_backend = normalize_backend($x->{backend});
-  } else {
-    $chunk_backend = $opt_b;
-  }
-
-  my $chunk_gui =  $x->{gui} || "false";
-  my $chunk_implicit =  $x->{implicit} || "false";
-  my $chunk_java =  $x->{java} || "false";
-  my $chunk_pvs =  $x->{pvs} || "false";
-  my $chunk_tty =  $x->{tty} || "false";
-  my $chunk_user =  $x->{user} || join(":",$_uid,$_gid);
-  my $chunk_version = $x->{version} || "latest";
-
-  my @chunk_commands = ();
-  if ( $x->{command} ) {
-    push @chunk_commands, $x->{command};
-  }
-  if ( $x->{commands} ) {
-    push @chunk_commands, @{$x->{commands}}
-  }
-
-  $chunk_version = cleanup($chunk_version);
-
-  my $found_dups = FALSE;
-
-  foreach my $y ( @chunk_commands ) {
-    my $command_name;
-    my $z;
-    my $ref_type = ref $y;
-    if ( !$ref_type ) {
-      $command_name = $y;
-      $z = {};
-    } elsif ( $ref_type eq "HASH" ) {
-      my ($name,$null) = keys %$y;
-      if (!defined($name) || defined($null)) {
-	die "Ill-formed command element,";
-      }
-      $command_name = $name;
-      $z = $y->{$name};
+  my $collection;
+  if ($x->{image}) {
+    my $backend;
+    if ($x->{backend}) {
+      $backend = normalize_backend($x->{backend});
     } else {
-      die "Unexpected $ref_type element,"
+      $backend = $opt_b;
     }
-
-    foreach my $key ( keys %$z) {
-
-      next if ($key eq "gui");
-      next if ($key eq "implicit");
-      next if ($key eq "java");
-      next if ($key eq "tty");
-      next if ($key eq "user");
-
-      die "Unexpected key <<$key>>,";
-    }
-
-    my $command_gui =  $z->{gui} || $chunk_gui;
-    my $command_tty =  $z->{tty} || $chunk_tty;
-    my $command_java =  $z->{java} || $chunk_java;
-    my $command_user =  $z->{user} || $chunk_user;
-    my $command_implicit = $z->{implicit} || $chunk_implicit;
-
-    $command_name = cleanup($command_name);
-
-    if ( defined($is_command{$command_name}) ) {
-      if (!$found_dups) {
-	print STDERR "Duplicate command(s):\n";
-	$found_dups = TRUE;
-      }
-      print " - $command_name\n";
-    }
-
-    $is_command{$command_name} = TRUE;
-    $image_of{$command_name} = $chunk_image;
-    $version_of{$command_name} = $chunk_version;
-    $is_pvs{$command_name} = bool($chunk_pvs);
-
-    $is_gui{$command_name} = bool($command_gui);
-    $is_implicit{$command_name} = bool($command_implicit);
-    $is_java{$command_name} = bool($command_java);
-    $is_tty{$command_name} = bool($command_tty);
-    $user_of{$command_name} = $command_user;
-
-    $backend_of{$command_name} = $chunk_backend;
+    $collection = DockerCollection->new($x) if ($backend eq "docker");
+    $collection = SingularityCollection->new($x) if ($backend eq "singularity");
+  } elsif ($x->{native}) {
+    $collection = NativeCollection->new($x)
   }
 
-  if ($found_dups) {
-    exit(1);
-  }
+  push @all_collections, $collection;
 }
-
-sub bool {
-  my ($s) = @_;
-  return TRUE if (lc($s) eq "true");
-  return FALSE if (lc($s) eq "false");
-  die "Unexpected boolean: <<$s>>,";
-}
-
-# ------------------------------------------------------------------------
-# Docker primative commands
-# ------------------------------------------------------------------------
-
-sub _docker_do_pull {
-  my ($image) = @_;
-  my $stat = run($docker_cmd,"pull",$image);
-  if ( $stat != 0 ) {
-    return $stat;
-  }
-}
-
-sub _docker_do_exec {
-  my ($image_version,$alt_cmd,@exec_args) = @_;
-
-  my @docker_args;
-
-  if ( $is_pvs{$alt_cmd} || $image_version =~ /^pvstodghill\// ) {
-    # Mount the current directory as container:/mnt
-    push @docker_args, "-v", $mount_path.":/mnt";
-    if ( $tmp_path ) {
-      push @docker_args, "-v", $tmp_path.":/tmp";
-    }
-    push @docker_args, "-w", "/mnt".$cwd_suffix;
-  }
-  push @docker_args, "--user", $user_of{$alt_cmd};
-
-  # set TERM
-  push @docker_args, "-e", "TERM=".$ENV{TERM};
-  # Don't log. It fills the disk.
-  push @docker_args, "--log-driver=none";
-  # Delete the container when finished.
-  push @docker_args, "--rm";
-  # so piping commands work
-  push @docker_args, "-i";
-  # run interactively
-  if ( $opt_s || $opt_t || $is_tty{$alt_cmd} ) {
-    push @docker_args, "-t";
-  }
-  # For Java commands, pass Java flags
-  if ( $is_java{$alt_cmd} ) {
-    my $JVM_FLAGS=$ENV{JVM_FLAGS};
-    if ( defined($JVM_FLAGS) ) {
-      push @docker_args, "-e", "\"JVM_FLAGS=$JVM_FLAGS\""
-    }
-  }
-  # For GUI commands, pass X11 flags
-  if ( $is_gui{$alt_cmd} ) {
-    my $DISPLAY = $ENV{DISPLAY};
-    ( defined($DISPLAY) ) || die "GUI command, but \$DISPLAY is not set,";
-    if ( $OSNAME eq "linux" ) {
-      push @docker_args, "-e", "DISPLAY=$DISPLAY";
-      push @docker_args, "-v", "/tmp/.X11-unix:/tmp/.X11-unix";
-    } elsif ( $OSNAME eq "darwin" ) {
-      push @docker_args, darwin_x11_args();
-    } else {
-      die "Cannot start GUI commands on <<$OSNAME>>,";
-    }
-  }
-  # export the variables
-  foreach my $var ( split(/,/, $opt_e) ) {
-    # fixme: should value better quoted?
-    push @docker_args, "-e", ($var."=".$ENV{$var});
-  }
-
-  my $error = run($docker_cmd, "run", @docker_args, $image_version, @exec_args);
-
-  return $error;
-}
-
-# ------------------------------------------------------------------------
-# Singularity primative commands
-# ------------------------------------------------------------------------
-
-sub _singularity_do_pull {
-  my ($image) = @_;
-  $image = "docker://".$image;
-
-  # this is not ideal...
-  my $temp_sif = mktemp( "/tmp/howtoXXXXX" );
-
-  my @silent_arg = $opt_q ? ("-s") : ();
-  my $stat = run($singularity_cmd,@silent_arg,"pull",$temp_sif, $image);
-
-  unlink($temp_sif);
-
-  if ( $stat != 0 ) {
-    return $stat;
-  }
-}
-
-sub _singularity_do_exec {
-  my ($image_version,$alt_cmd,@exec_args) = @_;
-
-  my @singularity_args;
-
-  if ( $is_pvs{$alt_cmd} || $image_version =~ /^pvstodghill\// ) {
-    push @singularity_args, "-e"; # clean environment
-    # Mount the current directory as container:/mnt
-    push @singularity_args, "-c"; # use minimal /dev
-    push @singularity_args, "-B", $mount_path.":/mnt";
-    if ( $tmp_path ) {
-      push @singularity_args, "-B", $tmp_path.":/tmp";
-    }
-    push @singularity_args, "-H", $mount_path.":/mnt";
-    push @singularity_args, "--pwd", "/mnt".$cwd_suffix;
-  }
-
-  if ( $is_gui{$alt_cmd} ) {
-    my $DISPLAY = $ENV{DISPLAY};
-    ( defined($DISPLAY) ) || die "GUI command, but \$DISPLAY is not set,";
-    push @singularity_args, "-B", "/tmp/.X11-unix:/tmp/.X11-unix";
-    @exec_args = ( "env", "DISPLAY=$DISPLAY", @exec_args );
-  }
-
-
-  $ENV{LC_ALL} = 'C';
-  $image_version = "docker://".$image_version;
-
-  my @silent_arg = $opt_q ? ("-s") : ("-q");
-  my $error = run($singularity_cmd, @silent_arg, "run", @singularity_args, $image_version, @exec_args);
-
-  return $error;
-}
-
-# ------------------------------------------------------------------------
-# Native primative commands
-# ------------------------------------------------------------------------
-
-sub _native_do_pull {
-  my ($image) = @_;
-  # noop
-}
-
-sub _native_do_exec {
-  my ($image_version,$alt_cmd,@exec_args) = @_;
-
-  my $stat = run(@exec_args);
-  if ( $stat != 0 ) {
-    return $stat;
-  }
-}
-
-
-# ------------------------------------------------------------------------
-# The command implementations
-# ------------------------------------------------------------------------
-
-my @all_names = sort (keys(%is_command));
-
-# ------------------------------------------------------------------------
-
-my $dispatch_pull = {
-		     docker => \&_docker_do_pull,
-		     native => \&_native_do_pull,
-		     singularity => \&_singularity_do_pull
-		    };
-
-my $dispatch_exec = {
-		     docker => \&_docker_do_exec,
-		     native => \&_native_do_exec,
-		     singularity => \&_singularity_do_exec
-		    };
 
 # ------------------------------------------------------------------------
 
 sub do_list {
-  foreach my $name (@all_names) {
-    my $image = $image_of{$name};
-    my $version = $version_of{$name};
-    print "$name - $image:$version\n";
+  foreach my $command_name (sort (keys $commands->%*)) {
+    my $command = $commands->{$command_name};
+    my $collection_name = $command->{collection}->name;
+    print "$command_name - $collection_name\n";
   }
   return 0;
 }
@@ -476,32 +529,19 @@ sub do_list {
 # ------------------------------------------------------------------------
 
 sub do_pull {
-  my @names;
   foreach my $name ( @ARGV ) {
     if ( $name eq "*" ) {
-      push @names, @all_names;
+      foreach my $collection ( @all_collections ) {
+	$collection->do_pull;
+      }
     } else {
-      push @names, $name;
+      my $collection = $commands->{$name}->{collection};
+      if (!defined($collection)) {
+	die "Command not found: $name";
+      }
+      $collection->do_pull;
     }
   }
-  my %to_pull;
-  foreach my $name (@names) {
-    my $image = $image_of{$name};
-    my $version = $version_of{$name};
-    my $backend = $backend_of{$name};
-    if (defined($image)) {
-      $to_pull{$image.":".$version} = $backend;
-    }
-  }
-
-  foreach my $image (sort(keys %to_pull)) {
-    my $backend = $to_pull{$image};
-    my $stat = $dispatch_pull->{$backend}->($image);
-    if ( $stat != 0 ) {
-      return $stat;
-    }
-  }
-
   return 0;
 }
 
@@ -509,44 +549,38 @@ sub do_pull {
 
 sub do_exec {
 
-  my ($exec_cmd,@cmd_args) = @ARGV;
+  # this is odd: "howto -s -c cmd" isn't valid.
+  
+  my $exec_cmd = shift @ARGV;
   if (!defined($exec_cmd)) {
     usage(1);
   }
   my $alt_cmd = $exec_cmd;
   if ( $opt_c ) { $alt_cmd = $opt_c; }
-  
-  my $image = $image_of{$alt_cmd};
-  if ( !defined($image) ) {
-    die "Cannot find image for command: $alt_cmd,";
-    #return run($exec_cmd,@cmd_args);
+  my $command = $commands->{$alt_cmd};
+  if ( !defined($command) ) {
+    die "Command not found: $alt_cmd,";
   }
-  my $version = $version_of{$alt_cmd};
-  my $image_version = $image.":".$version;
-
-  my $backend = $backend_of{$alt_cmd};
+  my $collection = $command->{collection};
 
   my @exec_args;
-
   if ( $opt_s ) {
-    ( ! $is_implicit{$alt_cmd} )
-      || die "-s does not work (probably) with implicit commands,";
-    push @exec_args, "/bin/bash";
+    $exec_cmd = "/bin/bash";
+    @exec_args = ();
   } else {
-    if ( ! $is_implicit{$alt_cmd} ) {
-      push @exec_args, $exec_cmd;
-    }
-    push @exec_args, @cmd_args;
+    # $exec_cmd = $exec_cmd;
+    @exec_args = @ARGV;
   }
 
   if (!$opt_q) {
-    print STDERR "### $image_version\n";
+    print STDERR "### $collection->{name}\n";
   }
 
-  my $error = $dispatch_exec->{$backend}->($image_version,$alt_cmd,@exec_args);
+  my $error = $collection->do_exec($command,$exec_cmd,@exec_args);
 
   return $error;
 }
+
 
 # ------------------------------------------------------------------------
 # Execute the command
@@ -562,6 +596,8 @@ if ( $opt_l ) {
 }
 exit($exit_stat);
 
+# ------------------------------------------------------------------------
+# Routine for executing subcommands
 # ------------------------------------------------------------------------
 
 sub run {

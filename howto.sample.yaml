@@ -1,12 +1,19 @@
 ---
-image: debian
-version: latest
+image: gns3/xeyes
+backend: docker
 commands:
-  - bash
+  - docker_xeyes: { gui: true, implicit: true }
+
+---
+image: gns3/xeyes
+backend: singularity
+commands:
+  - singularity_xeyes: { gui: true, implicit: true }
 
 ---
 image: pvstodghill/searchgui
 version: 3.2.6__2017-02-01
+backend: docker
 gui: false
 commands:
   - FastaCLI: { java: true }
@@ -14,12 +21,6 @@ commands:
   - PathSettingsCLI: { java: true }
   - SearchCLI: { java: true }
   - SearchGUI: { gui: true, java: true }
-
----
-image: jess/firefox
-gui: true
-implicit: true
-command: firefox
 
 ---
 image: pvstodghill/samtools
@@ -35,8 +36,7 @@ commands:
   - hello-world: { implicit: true }
 
 ---
-image: stuff_on_my_machine
-backend: native
+native: stuff_on_my_machine
 commands:
   - blastn
 
