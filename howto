@@ -178,6 +178,8 @@ foreach my $x ( @config_elements ) {
     next if ($key eq "commands");
     next if ($key eq "gui");
     next if ($key eq "image");
+    # "implicit": Docker image runs command without explicit
+    # invokation. E.g., "docker run bowtie2 args ..."
     next if ($key eq "implicit");
     next if ($key eq "java");
     next if ($key eq "pvs");
