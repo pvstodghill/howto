@@ -2,8 +2,11 @@
 
 use strict;
 use warnings;
+#use Carp::Always;
 use English;
 use Cwd 'abs_path';
+
+
 
 use File::Temp qw{:mktemp};
 
@@ -192,7 +195,6 @@ foreach my $x ( @config_elements ) {
   }
 
   my $chunk_image = $x->{image};
-
   if ( !defined($chunk_image) ) {
     die "'image' was not specified,";
   }
@@ -245,8 +247,9 @@ foreach my $x ( @config_elements ) {
     foreach my $key ( keys %$z) {
 
       next if ($key eq "gui");
-      next if ($key eq "tty");
+      next if ($key eq "implicit");
       next if ($key eq "java");
+      next if ($key eq "tty");
       next if ($key eq "user");
 
       die "Unexpected key <<$key>>,";
@@ -256,6 +259,7 @@ foreach my $x ( @config_elements ) {
     my $command_tty =  $z->{tty} || $chunk_tty;
     my $command_java =  $z->{java} || $chunk_java;
     my $command_user =  $z->{user} || $chunk_user;
+    my $command_implicit = $z->{implicit} || $chunk_implicit;
 
     $command_name = cleanup($command_name);
 
@@ -270,12 +274,12 @@ foreach my $x ( @config_elements ) {
     $is_command{$command_name} = TRUE;
     $image_of{$command_name} = $chunk_image;
     $version_of{$command_name} = $chunk_version;
-    $is_implicit{$command_name} = bool($chunk_implicit);
     $is_pvs{$command_name} = bool($chunk_pvs);
 
     $is_gui{$command_name} = bool($command_gui);
-    $is_tty{$command_name} = bool($command_tty);
+    $is_implicit{$command_name} = bool($command_implicit);
     $is_java{$command_name} = bool($command_java);
+    $is_tty{$command_name} = bool($command_tty);
     $user_of{$command_name} = $command_user;
 
     $backend_of{$command_name} = $chunk_backend;
