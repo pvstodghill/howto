@@ -1,8 +1,14 @@
 ---
-environment: htslib
-packages: htslib=1.12
+environment: howto_test_env
+packages: htslib
 commands:
   - bgzip
+
+---
+environment: blast
+version: 2.11.0-0
+commands:
+  - blastn
 
 ---
 image: gns3/xeyes
@@ -44,7 +50,7 @@ commands:
 ---
 native: stuff_on_my_machine
 commands:
-  - blastn
+  - hostname
 
 ---
 image: pvstodghill/bowtie2

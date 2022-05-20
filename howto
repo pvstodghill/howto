@@ -298,7 +298,14 @@ package CondaCollection {
     if ($element->{packages}) {
       $self->{packages} = $element->{packages};
     } else {
-      $self->{packages} = $self->{environment};
+      my $version = "";
+      if ($element->{version}) {
+	$version = $element->{version};
+	if ($version !~ /^[<=>!]/) {
+	  $version = "=".$version;
+	}
+      }
+      $self->{packages} = $self->{environment}.$version;
     }
   }
 
