@@ -176,7 +176,6 @@ foreach my $x ( @config_elements ) {
     next if ($key eq "backend");
     next if ($key eq "command");
     next if ($key eq "commands");
-    next if ($key eq "direct");
     next if ($key eq "gui");
     next if ($key eq "image");
     next if ($key eq "implicit");
@@ -189,14 +188,10 @@ foreach my $x ( @config_elements ) {
     print STDERR "# ignoring unexpected key: <<$key>>\n";
   }
 
-  my $chunk_direct = defined($x->{direct}) ? bool($x->{direct}) : FALSE;
   my $chunk_image = $x->{image};
 
-  if ( !$chunk_direct && !defined($chunk_image) ) {
-    die "Neither 'direct' nor 'image' is specified,";
-  }
-  if ( $chunk_direct && defined($chunk_image) ) {
-    die "Both 'direct' and 'image' are specified,";
+  if ( !defined($chunk_image) ) {
+    die "'image' was not specified,";
   }
 
   my $chunk_backend;
@@ -445,11 +440,7 @@ sub do_list {
   foreach my $name (@all_names) {
     my $image = $image_of{$name};
     my $version = $version_of{$name};
-    if (defined($image)) {
-      print "$name - $image:$version\n";
-    } else {
-      print "$name - (direct)\n";
-    }
+    print "$name - $image:$version\n";
   }
   return 0;
 }
