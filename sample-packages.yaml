@@ -1,0 +1,28 @@
+# https://github.com/samtools/samtools
+---
+image: pvstodghill/samtools
+version: 1.15.1__2022-05-02
+backend: singularity
+commands:
+  - samtools
+
+---
+image: hello-world
+backend: docker
+commands:
+  - hello-world: { implicit: true }
+
+---
+image: stuff_on_my_machine
+backend: native
+commands:
+  - blastn
+
+# https://github.com/BenLangmead/bowtie2
+---
+image: pvstodghill/bowtie2
+version: 2.4.5__2022-01-31
+backend: docker
+commands:
+  - bowtie2
+
