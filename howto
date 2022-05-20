@@ -74,11 +74,19 @@ if ( $opt_n ) {
   $opt_v = TRUE;
 }
 
-$opt_b = lc($opt_b);
+sub normalize_backend {
+  my ($raw) = @_;
+  my $s = lc($raw);
+  return $s if ($s eq "docker");
+  return $s if ($s eq "singularity");
+  die;
+  print STDERR "Invalid backend: <<$raw>>\n";
+  exit 1;
+}
 
-( $opt_b eq "docker" )
-  || ( $opt_b eq "singularity" )
-  || usage(1);
+if ($opt_b) {
+  $opt_b = normalize_backend($opt_b);
+}
 
 # ------------------------------------------------------------------------
 # Figure out mount and working directories
@@ -131,6 +139,7 @@ my @config_elements = YAML::LoadFile($config_file);
 # Parse the config elements
 # ------------------------------------------------------------------------
 
+my %backend_of;
 my %image_of;
 my %is_command;
 my %is_gui;
@@ -164,6 +173,7 @@ foreach my $x ( @config_elements ) {
 
   foreach my $key ( keys %$x) {
 
+    next if ($key eq "backend");
     next if ($key eq "command");
     next if ($key eq "commands");
     next if ($key eq "direct");
@@ -187,6 +197,13 @@ foreach my $x ( @config_elements ) {
   }
   if ( $chunk_direct && defined($chunk_image) ) {
     die "Both 'direct' and 'image' are specified,";
+  }
+
+  my $chunk_backend;
+  if ($x->{backend}) {
+    $chunk_backend = normalize_backend($x->{backend});
+  } else {
+    $chunk_backend = $opt_b;
   }
 
   my $chunk_gui =  $x->{gui} || "false";
@@ -262,6 +279,8 @@ foreach my $x ( @config_elements ) {
     $is_tty{$command_name} = bool($command_tty);
     $is_java{$command_name} = bool($command_java);
     $user_of{$command_name} = $command_user;
+
+    $backend_of{$command_name} = $chunk_backend;
   }
 
   if ($found_dups) {
@@ -410,10 +429,15 @@ my @all_names = sort (keys(%is_command));
 
 # ------------------------------------------------------------------------
 
-my ($_pull,$_exec);
-($_pull,$_exec) = (\&_docker_do_pull,\&_docker_do_exec) if ( $opt_b eq "docker");
-($_pull,$_exec) = (\&_singularity_do_pull,\&_singularity_do_exec) if ( $opt_b eq "singularity");
-(defined($_pull) && defined($_exec)) || die "can't happen,";
+my $dispatch_pull = {
+		     docker => \&_docker_do_pull,
+		     singularity => \&_singularity_do_pull
+		    };
+
+my $dispatch_exec = {
+		     docker => \&_docker_do_exec,
+		     singularity => \&_singularity_do_exec
+		    };
 
 # ------------------------------------------------------------------------
 
@@ -446,13 +470,15 @@ sub do_pull {
   foreach my $name (@names) {
     my $image = $image_of{$name};
     my $version = $version_of{$name};
+    my $backend = $backend_of{$name};
     if (defined($image)) {
-      $to_pull{$image.":".$version} = TRUE;
+      $to_pull{$image.":".$version} = $backend;
     }
   }
 
   foreach my $image (sort(keys %to_pull)) {
-    my $stat = $_pull->($image);
+    my $backend = $to_pull{$image};
+    my $stat = $dispatch_pull->{$backend}->($image);
     if ( $stat != 0 ) {
       return $stat;
     }
@@ -480,6 +506,8 @@ sub do_exec {
   my $version = $version_of{$alt_cmd};
   my $image_version = $image.":".$version;
 
+  my $backend = $backend_of{$alt_cmd};
+
   my @exec_args;
 
   if ( $opt_s ) {
@@ -497,7 +525,7 @@ sub do_exec {
     print STDERR "### $image_version\n";
   }
 
-  my $error = $_exec->($image_version,$alt_cmd,@exec_args);
+  my $error = $dispatch_exec->{$backend}->($image_version,$alt_cmd,@exec_args);
 
   return $error;
 }
