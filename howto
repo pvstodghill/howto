@@ -78,6 +78,7 @@ sub normalize_backend {
   my ($raw) = @_;
   my $s = lc($raw);
   return $s if ($s eq "docker");
+  return $s if ($s eq "native");
   return $s if ($s eq "singularity");
   die;
   print STDERR "Invalid backend: <<$raw>>\n";
@@ -417,6 +418,24 @@ sub _singularity_do_exec {
   return $error;
 }
 
+# ------------------------------------------------------------------------
+# Native primative commands
+# ------------------------------------------------------------------------
+
+sub _native_do_pull {
+  my ($image) = @_;
+  # noop
+}
+
+sub _native_do_exec {
+  my ($image_version,$alt_cmd,@exec_args) = @_;
+
+  my $stat = run(@exec_args);
+  if ( $stat != 0 ) {
+    return $stat;
+  }
+}
+
 
 # ------------------------------------------------------------------------
 # The command implementations
@@ -428,11 +447,13 @@ my @all_names = sort (keys(%is_command));
 
 my $dispatch_pull = {
 		     docker => \&_docker_do_pull,
+		     native => \&_native_do_pull,
 		     singularity => \&_singularity_do_pull
 		    };
 
 my $dispatch_exec = {
 		     docker => \&_docker_do_exec,
+		     native => \&_native_do_exec,
 		     singularity => \&_singularity_do_exec
 		    };
 
