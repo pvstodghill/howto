@@ -1,4 +1,10 @@
 ---
+environment: htslib
+packages: htslib=1.12
+commands:
+  - bgzip
+
+---
 image: gns3/xeyes
 backend: docker
 commands:

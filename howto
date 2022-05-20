@@ -47,6 +47,7 @@ our $opt_s;
 our $opt_t;
 our $opt_v;
 
+our $conda_cmd = $ENV{HOWTO_CONDA_CMD} || "conda";
 our $docker_cmd = $ENV{HOWTO_DOCKER_CMD} || "docker";
 our $singularity_cmd = $ENV{HOWTO_SINGULARITY_CMD} || "singularity";
 
@@ -272,6 +273,52 @@ package NativeCollection {
   sub do_exec {
     my ($self,$command,@exec_command_line) = @_;
     return ::run(@exec_command_line);
+  }
+
+  1;
+};
+
+# ------------------------------------------------------------------------
+# Collection of conda commands
+# ------------------------------------------------------------------------
+
+package CondaCollection {
+
+  use strict;
+
+  our @ISA = qw(Collection);
+
+  sub _initialize {
+    my ($self,$element) = @_;
+    $self->SUPER::_initialize($element);
+
+    $self->{backend} = "conda";
+    $self->{environment} = ::cleanup($element->{environment});
+    $self->{name} = "conda:".$self->{environment};
+    if ($element->{packages}) {
+      $self->{packages} = $element->{packages};
+    } else {
+      $self->{packages} = $self->{environment};
+    }
+  }
+
+  sub do_pull {
+    my ($self) = @_;
+
+    # this is pretty bogus
+    `$::conda_cmd run -n $self->{environment} true 2>/dev/null`;
+    if ($? == 0) {
+      return;
+    }
+
+    return ::run($::conda_cmd,"create","-y","--name",$self->{environment},
+		 $self->{packages});
+  }
+
+  sub do_exec {
+    my ($self,$command,@exec_command_line) = @_;
+    return ::run($::conda_cmd,"run","-n",$self->{environment},
+		 @exec_command_line);
   }
 
   1;
@@ -507,8 +554,12 @@ foreach my $x ( @config_elements ) {
     }
     $collection = DockerCollection->new($x) if ($backend eq "docker");
     $collection = SingularityCollection->new($x) if ($backend eq "singularity");
+  } elsif ($x->{environment}) {
+    $collection = CondaCollection->new($x)
   } elsif ($x->{native}) {
     $collection = NativeCollection->new($x)
+  } else {
+    die "unrecognized collection: ...";
   }
 
   push @all_collections, $collection;
