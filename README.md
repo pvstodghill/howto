@@ -1,20 +1,21 @@
 `howto` is a script for simplifying running commands from Docker and
-Singularity images.
+Singularity images, Conda environments, or natively.
 
-# Installation
+# Prerequisites
 
-First install Docker and/or Singularity. The `howto` script used
-Singularity by default, but this can be override by setting the
-following environment variable,
-
-    export HOWTO_BACKEND=docker
+`howto` is meant to be a wrapper for Docker, Singularity, and/or
+Conda, so ideally some combination of these should be installed on
+your system.
 
 The `howto` script is written in Perl and relies on a handful of
 external libraries that should be part of the Perl core.
 
-Just put the script somewhere on your `$PATH`.
+# Installation
 
-# Configuration
+Just put the `howto` and `find-closest-ancester-dir` scripts somewhere
+on your `$PATH`.
+
+# Specifying the packages and their commands.
 
 The `howto` script looks for a YAML file that lists the known Docker
 packages and the commands that each provide. The `howto` scripts looks
@@ -25,9 +26,19 @@ for the YAML file in each of these locations, in this order:
 - `./.howto.yaml`
 - `~/.howto.yaml`
 
-An example YAML file, `howto.sample.yaml`, is provided here.
+An example YAML file, `howto.sample.yaml`, is provided.
 
-<!-- FIXME - document the YAML file content -->
+<!-- FIXME: document the YAML file syntax. -->
+
+# Environment variables
+
+The `howto` script used
+Singularity by default, but this can be override by setting the
+following environment variable,
+
+    export HOWTO_BACKEND=docker
+
+<!-- FIXME: expands this -->
 
 # Usage
 
@@ -42,7 +53,7 @@ The script is able to map commands to containers using 'howto.yaml' (also attach
 Here's how it might work,
 
     # select the Docker backend; Singularity is the default
-    export HOWTO_BACKEND=dockerw
+    export HOWTO_BACKEND=docker
 
     # pull all of the containers specified in howto.yaml. Both
     # Singularity and Docker containers are cached, so you should only
