@@ -302,23 +302,52 @@ package CondaCollection {
     }
   }
 
+  sub _set_conda_base {
+    my ($self) = @_;
+
+    if ($self->{conda_base}) { return; }
+    $self->{conda_base} = `$::conda_cmd info --base 2>/dev/null`;
+    if ($? != 0) {
+      die "Cannot determine conda base";
+    }
+    chomp $self->{conda_base};
+  }
+
   sub do_pull {
     my ($self) = @_;
 
-    # this is pretty bogus
-    `$::conda_cmd run -n $self->{environment} true 2>/dev/null`;
-    if ($? == 0) {
+    # This is the slow version:
+    # # this is pretty bogus
+    # `$::conda_cmd run -n $self->{environment} true 2>/dev/null`;
+    # if ($? == 0) {
+    #   return;
+    # }
+
+    # This is the cheater version.
+    $self->_set_conda_base;
+    if ( -e $self->{conda_base}."/envs/".$self->{environment} ) {
       return;
     }
 
     return ::run($::conda_cmd,"create","-y","--name",$self->{environment},
-		 $self->{packages});
+    		 $self->{packages});
   }
 
   sub do_exec {
     my ($self,$command,@exec_command_line) = @_;
-    return ::run($::conda_cmd,"run","-n",$self->{environment},
-		 @exec_command_line);
+
+    $self->do_pull;
+
+    # # This is the slow version:
+    # return ::run($::conda_cmd,"run","-n",$self->{environment},
+    # 		 @exec_command_line);
+
+    # This is the cheater version.
+    $self->_set_conda_base;
+    my $bindir=$self->{conda_base}."/envs/".$self->{environment}."/bin";
+
+    $ENV{PATH} = $bindir.":".$ENV{PATH};
+    return ::run(@exec_command_line);
   }
 
   1;
