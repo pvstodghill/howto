@@ -2,8 +2,8 @@
 
 use strict;
 use feature 'postderef';
-no warnings "experimental::postderef";
 use warnings FATAL => 'all';
+no warnings "experimental::postderef";
 # use Carp::Always;
 
 use English;
