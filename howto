@@ -343,8 +343,9 @@ package CondaCollection {
       return;
     }
 
+    my @packages=split(" ",$self->{packages});
     return ::run($::conda_cmd,"create","-q","-y","--name",$self->{environment},
-    		 $self->{packages});
+    		 @packages);
   }
 
   sub do_exec {
