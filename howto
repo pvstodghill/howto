@@ -285,6 +285,7 @@ package NativeCollection {
 package CondaCollection {
 
   use strict;
+  use File::Basename;
 
   our @ISA = qw(Collection);
 
@@ -313,6 +314,12 @@ package CondaCollection {
     my ($self) = @_;
 
     if ($self->{conda_base}) { return; }
+    if ($ENV{CONDA_EXE}) {
+      # remove bin/conda from $CONDA_EXE
+      $self->{conda_base} = dirname(dirname($ENV{CONDA_EXE}));
+      return;
+    }
+
     $self->{conda_base} = `$::conda_cmd info --base 2>/dev/null`;
     if ($? != 0) {
       die "Cannot determine conda base";
@@ -336,7 +343,7 @@ package CondaCollection {
       return;
     }
 
-    return ::run($::conda_cmd,"create","-y","--name",$self->{environment},
+    return ::run($::conda_cmd,"create","-q","-y","--name",$self->{environment},
     		 $self->{packages});
   }
 
@@ -616,6 +623,9 @@ sub do_list {
 # ------------------------------------------------------------------------
 
 sub do_pull {
+  if (!$opt_q) {
+    $opt_v = TRUE;
+  }
   foreach my $name ( @ARGV ) {
     if ( $name eq "*" ) {
       foreach my $collection ( @all_collections ) {
