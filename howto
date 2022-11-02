@@ -297,7 +297,7 @@ package CondaCollection {
     $self->{environment} = ::cleanup($element->{environment});
     $self->{name} = "conda:".$self->{environment};
     if ($element->{packages}) {
-      $self->{packages} = $element->{packages};
+      $self->{packages} = [ split(" ",$element->{packages}) ];
     } else {
       my $version = "";
       if ($element->{version}) {
@@ -306,7 +306,7 @@ package CondaCollection {
 	  $version = "=".$version;
 	}
       }
-      $self->{packages} = $self->{environment}.$version;
+      $self->{packages} = [ $self->{environment}.$version ];
     }
   }
 
@@ -343,9 +343,8 @@ package CondaCollection {
       return;
     }
 
-    my @packages=split(" ",$self->{packages});
     return ::run($::conda_cmd,"create","-q","-y","--name",$self->{environment},
-    		 @packages);
+    		 @{$self->{packages}});
   }
 
   sub do_exec {
