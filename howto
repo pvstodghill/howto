@@ -593,7 +593,9 @@ foreach my $x ( @config_elements ) {
   } elsif ($x->{native}) {
     $collection = NativeCollection->new($x)
   } else {
-    die "unrecognized collection: ...";
+    use Data::Dumper;
+    print Dumper($x),"\n";
+    die "unrecognized collection.";
   }
 
   push @all_collections, $collection;
