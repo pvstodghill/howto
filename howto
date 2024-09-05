@@ -308,6 +308,11 @@ package CondaCollection {
       }
       $self->{packages} = [ $self->{environment}.$version ];
     }
+    if ($element->{channels}) {
+      $self->{channels} = $element->{channels};
+    } else {
+      $self->{channels} = [];
+    }
   }
 
   sub _set_conda_base {
@@ -344,6 +349,7 @@ package CondaCollection {
     }
 
     return ::run($::conda_cmd,"create","-q","-y","--name",$self->{environment},
+		 (map { ("-c", $_) } @{$self->{channels}}),
 		 @{$self->{packages}});
   }
 
