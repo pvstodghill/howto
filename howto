@@ -309,7 +309,8 @@ package CondaCollection {
       $self->{packages} = [ $self->{environment}.$version ];
     }
     if ($element->{channels}) {
-      $self->{channels} = $element->{channels};
+      $self->{channels} =
+	["--override-channels", (map { ("-c", $_) } @{$element->{channels}})];
     } else {
       $self->{channels} = [];
     }
@@ -345,18 +346,22 @@ package CondaCollection {
     # This is the cheater version.
     $self->_set_conda_base;
     if ( -e $self->{conda_base}."/envs/".$self->{environment} ) {
-      return 0;
+      if ( $explicit ) {
+	return ::run($::conda_cmd,"update","-q","-y","--name",$self->{environment},
+		     @{$self->{channels}}, @{$self->{packages}});
+      } else {
+	return 0;
+      }
+    } else {
+      return ::run($::conda_cmd,"create","-q","-y","--name",$self->{environment},
+		   @{$self->{channels}}, @{$self->{packages}});
     }
-
-    return ::run($::conda_cmd,"create","-q","-y","--name",$self->{environment},
-		 (map { ("-c", $_) } @{$self->{channels}}),
-		 @{$self->{packages}});
   }
 
   sub do_exec {
     my ($self,$command,@exec_command_line) = @_;
 
-    $self->do_pull;
+    $self->do_pull(FALSE);
 
     # # This is the slow version:
     # return ::run($::conda_cmd,"run","-n",$self->{environment},
