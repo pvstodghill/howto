@@ -265,7 +265,7 @@ package NativeCollection {
   }
 
   sub do_pull {
-    my ($self) = @_;
+    my ($self,$explicit) = @_;
     # noop;
     return 0;
   }
@@ -286,6 +286,8 @@ package CondaCollection {
 
   use strict;
   use File::Basename;
+
+  use constant { TRUE => 1, FALSE => 0 };
 
   our @ISA = qw(Collection);
 
@@ -334,7 +336,7 @@ package CondaCollection {
   }
 
   sub do_pull {
-    my ($self) = @_;
+    my ($self,$explicit) = @_;
 
     # This is the slow version:
     # # this is pretty bogus
@@ -399,7 +401,7 @@ package DockerCollection {
   }
 
   sub do_pull {
-    my ($self) = @_;
+    my ($self,$explicit) = @_;
     if ($self->{pulled}) {
       return 0;
     }
@@ -493,7 +495,7 @@ package SingularityCollection {
   }
 
   sub do_pull {
-    my ($self) = @_;
+    my ($self,$explicit) = @_;
     if ($self->{pulled}) {
       return 0;
     }
@@ -633,7 +635,7 @@ sub do_pull {
   foreach my $name ( @ARGV ) {
     if ( $name eq "*" ) {
       foreach my $collection ( @all_collections ) {
-	my $stat = $collection->do_pull;
+	my $stat = $collection->do_pull(TRUE);
 	if ($stat) { return $stat; }
       }
     } else {
@@ -641,7 +643,7 @@ sub do_pull {
       if (!defined($collection)) {
 	die "Command not found: $name";
       }
-      my $stat = $collection->do_pull;
+      my $stat = $collection->do_pull(TRUE);
       if ($stat) { return $stat; }
     }
   }
