@@ -322,6 +322,11 @@ package CondaCollection {
     my ($self) = @_;
 
     if ($self->{conda_base}) { return; }
+    if ($ENV{MAMBA_EXE}) {
+      # remove bin/conda from $MAMBA_EXE
+      $self->{conda_base} = dirname(dirname($ENV{MAMBA_EXE}));
+      return;
+    }
     if ($ENV{CONDA_EXE}) {
       # remove bin/conda from $CONDA_EXE
       $self->{conda_base} = dirname(dirname($ENV{CONDA_EXE}));
