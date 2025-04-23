@@ -299,7 +299,12 @@ package CondaCollection {
     $self->{environment} = ::cleanup($element->{environment});
     $self->{name} = "conda:".$self->{environment};
     if ($element->{packages}) {
-      $self->{packages} = [ split(" ",$element->{packages}) ];
+      my $x = $element->{packages};
+      if (ref($x) eq "ARRAY") {
+	$self->{packages} = $x;
+      } else {
+	$self->{packages} = [ split(" ",$x) ];
+      }
     } else {
       my $version = "";
       if ($element->{version}) {
