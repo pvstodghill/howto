@@ -355,6 +355,10 @@ package CondaCollection {
     #   return;
     # }
 
+    # conda -q is not as quiet as it ought to be.
+    local $STDOUT;
+    open(STDOUT, ">", "/dev/null");
+
     # This is the cheater version.
     $self->_set_conda_base;
     if ( -e $self->{conda_base}."/envs/".$self->{environment} ) {
