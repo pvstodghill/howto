@@ -356,7 +356,7 @@ package CondaCollection {
     # }
 
     # conda -q is not as quiet as it ought to be.
-    local $STDOUT;
+    local *STDOUT;
     open(STDOUT, ">", "/dev/null");
 
     # This is the cheater version.
