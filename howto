@@ -47,7 +47,7 @@ our $opt_s;
 our $opt_t;
 our $opt_v;
 
-our $conda_cmd = $ENV{HOWTO_CONDA_CMD} || "conda";
+our $conda_cmd = $ENV{HOWTO_CONDA_CMD} || "mamba";
 our $docker_cmd = $ENV{HOWTO_DOCKER_CMD} || "docker";
 our $singularity_cmd = $ENV{HOWTO_SINGULARITY_CMD} || "singularity";
 
@@ -355,23 +355,22 @@ package CondaCollection {
     #   return;
     # }
 
-    # conda -q is not as quiet as it ought to be.
-    local *STDOUT;
-    open(STDOUT, ">", "/dev/null");
-
     # This is the cheater version.
     $self->_set_conda_base;
+    my $stat;
     if ( -e $self->{conda_base}."/envs/".$self->{environment} ) {
       if ( $explicit ) {
-	return ::run($::conda_cmd,"update","-q","-y","--name",$self->{environment},
-		     @{$self->{channels}}, @{$self->{packages}});
+	$stat = ::run($::conda_cmd,"update","-q","-y","--name",$self->{environment},
+		      @{$self->{channels}}, @{$self->{packages}});
       } else {
-	return 0;
+	$stat = 0;
       }
     } else {
-      return ::run($::conda_cmd,"create","-q","-y","--name",$self->{environment},
-		   @{$self->{channels}}, @{$self->{packages}});
+      $stat = ::run($::conda_cmd,"create","-q","-y","--name",$self->{environment},
+		    @{$self->{channels}}, @{$self->{packages}});
     }
+
+    return $stat;
   }
 
   sub do_exec {
