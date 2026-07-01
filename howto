@@ -47,7 +47,7 @@ our $opt_s;
 our $opt_t;
 our $opt_v;
 
-our $conda_cmd = $ENV{HOWTO_CONDA_CMD} || "mamba";
+our $conda_cmd = $ENV{HOWTO_CONDA_CMD} || "conda";
 our $docker_cmd = $ENV{HOWTO_DOCKER_CMD} || "docker";
 our $singularity_cmd = $ENV{HOWTO_SINGULARITY_CMD} || "singularity";
 
